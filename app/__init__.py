@@ -13,8 +13,11 @@ from app.routes.weather import weather_bp
 from app.routes.reports import reports_bp
 from app.routes.auth import auth_bp
 from app.routes.admin import admin_bp
+from app.routes.risk import risk_bp 
 from app.routes.historical_floods import historical_floods_bp
 from app.routes.historical_weather import historical_weather_bp
+from app.routes.notifications import notifications_bp
+from app.services.firebase_service import initialize_firebase
 def create_app(config_class=None):
     """
     Application factory for the FloodShield backend.
@@ -33,6 +36,12 @@ def create_app(config_class=None):
     app.config.from_object(config_class)
 
     # Initialize Flask extensions
+    # Initialize Firebase when the application is not running automated tests.
+    if not app.config.get("TESTING"):
+        initialize_firebase(
+            app.config.get("FIREBASE_CREDENTIALS_PATH")
+        )
+
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
@@ -47,6 +56,8 @@ def create_app(config_class=None):
     app.register_blueprint(admin_bp)
     app.register_blueprint(historical_floods_bp)
     app.register_blueprint(historical_weather_bp)
+    app.register_blueprint(risk_bp)
+    app.register_blueprint(notifications_bp)
 
     #default home page api to get respose on direct url 
     @app.route("/", methods=["GET"])

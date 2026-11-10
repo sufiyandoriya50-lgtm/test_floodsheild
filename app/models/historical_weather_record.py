@@ -15,6 +15,11 @@ class HistoricalWeatherRecord(db.Model):
     # Historical weather measurements.
     temperature_c = db.Column(db.Float, nullable=True)
     rainfall_mm = db.Column(db.Float, nullable=False)
+    # Duration in seconds represented by the precipitation measurement.
+    precipitation_interval_seconds = db.Column(
+            db.Integer,
+            nullable=True
+        )
     wind_speed_kmh = db.Column(db.Float, nullable=True)
     weather_code = db.Column(db.Integer, nullable=True)
 

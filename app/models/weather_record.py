@@ -20,6 +20,13 @@ class WeatherRecord(db.Model):
 
     # Weather measurements
     rainfall_mm = db.Column(db.Float, nullable=True)
+    
+    # Duration in seconds represented by the precipitation measurement.
+    # Example: 900 means the precipitation value covers 15 minutes.
+    precipitation_interval_seconds = db.Column(
+    db.Integer,
+    nullable=True
+        )
     temperature_c = db.Column(db.Float, nullable=True)
     wind_speed_kmh = db.Column(db.Float, nullable=True)
 

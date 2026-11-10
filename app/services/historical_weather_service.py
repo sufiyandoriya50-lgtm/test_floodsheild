@@ -14,6 +14,7 @@ def validate_historical_weather_record(
     temperature_c=None,
     wind_speed_kmh=None,
     weather_code=None,
+    precipitation_interval_seconds=None,
 ):
 
     def validate_number(value, field_name):
@@ -67,7 +68,20 @@ def validate_historical_weather_record(
 
     if not isinstance(source, str) or not source.strip():
         raise ValueError("Source is required")
-
+    # Validate the precipitation measurement interval when supplied.
+    if precipitation_interval_seconds is not None:
+        if (
+            isinstance(precipitation_interval_seconds, bool)
+            or not isinstance(precipitation_interval_seconds, int)
+        ):
+            raise ValueError(
+                "Precipitation interval must be an integer number of seconds"
+            )
+    
+        if precipitation_interval_seconds <= 0:
+            raise ValueError(
+                "Precipitation interval must be greater than zero"
+            )
     return {
         "latitude": latitude,
         "longitude": longitude,
@@ -77,4 +91,6 @@ def validate_historical_weather_record(
         "temperature_c": temperature_c,
         "wind_speed_kmh": wind_speed_kmh,
         "weather_code": weather_code,
+         # Preserve the validated precipitation measurement interval.
+        "precipitation_interval_seconds":   precipitation_interval_seconds,
     }

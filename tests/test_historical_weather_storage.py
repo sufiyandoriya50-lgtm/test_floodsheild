@@ -95,3 +95,40 @@ def test_invalid_weather_record_is_not_saved(app):
             )
 
         assert HistoricalWeatherRecord.query.count() == 0
+def test_store_historical_weather_with_interval(app):
+    with app.app_context():
+        record = create_historical_weather_record(
+            latitude=23.0225,
+            longitude=72.5714,
+            rainfall_mm=8.0,
+            recorded_at=datetime.now(timezone.utc),
+            source="Open-Meteo",
+            precipitation_interval_seconds=3600,
+        )
+
+        saved_record = db.session.get(
+            HistoricalWeatherRecord,
+            record.id
+        )
+
+        assert saved_record is not None
+        assert saved_record.precipitation_interval_seconds == 3600
+
+
+def test_store_historical_weather_without_interval(app):
+    with app.app_context():
+        record = create_historical_weather_record(
+            latitude=23.0225,
+            longitude=72.5714,
+            rainfall_mm=8.0,
+            recorded_at=datetime.now(timezone.utc),
+            source="Open-Meteo",
+        )
+
+        saved_record = db.session.get(
+            HistoricalWeatherRecord,
+            record.id
+        )
+
+        assert saved_record is not None
+        assert saved_record.precipitation_interval_seconds is None

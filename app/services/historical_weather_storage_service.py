@@ -17,6 +17,7 @@ def create_historical_weather_record(
     temperature_c=None,
     wind_speed_kmh=None,
     weather_code=None,
+    precipitation_interval_seconds=None,
 ):
 
     # Step 1: Validate all incoming weather data.
@@ -29,6 +30,7 @@ def create_historical_weather_record(
         temperature_c=temperature_c,
         wind_speed_kmh=wind_speed_kmh,
         weather_code=weather_code,
+        precipitation_interval_seconds=precipitation_interval_seconds,
     )
 
     # Step 2: Create a database model using validated values.

@@ -29,6 +29,11 @@ def save_weather_record(weather_data):
         latitude=weather_data["latitude"],
         longitude=weather_data["longitude"],
         rainfall_mm=weather_data["rainfall_mm"],
+        # Store the duration represented by the precipitation measurement.
+          precipitation_interval_seconds=weather_data.get(
+                "precipitation_interval_seconds"
+            ),
+
         temperature_c=weather_data["temperature_c"],
         wind_speed_kmh=weather_data["wind_speed_kmh"],
         source=weather_data["source"],

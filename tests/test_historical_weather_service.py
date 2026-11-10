@@ -82,3 +82,71 @@ def test_nan_rainfall_rejected(valid_weather_data):
 
     with pytest.raises(ValueError, match="must be finite"):
         validate_historical_weather_record(**valid_weather_data)
+"""
+   test        -   what it checks
+   
+Valid interval : Accepts 3600 seconds
+Missing interval : Accepts unknown interval
+Zero interval : Rejects invalid duration
+Negative interval : Rejects invalid duration
+Float interval : Requires integer seconds
+"""
+def test_valid_precipitation_interval():
+    result = validate_historical_weather_record(
+        latitude=23.0225,
+        longitude=72.5714,
+        rainfall_mm=8.0,
+        recorded_at=datetime.now(timezone.utc),
+        source="Open-Meteo",
+        precipitation_interval_seconds=3600,
+    )
+
+    assert result["precipitation_interval_seconds"] == 3600
+
+
+def test_missing_precipitation_interval():
+    result = validate_historical_weather_record(
+        latitude=23.0225,
+        longitude=72.5714,
+        rainfall_mm=8.0,
+        recorded_at=datetime.now(timezone.utc),
+        source="Open-Meteo",
+    )
+
+    assert result["precipitation_interval_seconds"] is None
+
+
+def test_reject_zero_precipitation_interval():
+    with pytest.raises(ValueError):
+        validate_historical_weather_record(
+            latitude=23.0225,
+            longitude=72.5714,
+            rainfall_mm=8.0,
+            recorded_at=datetime.now(timezone.utc),
+            source="Open-Meteo",
+            precipitation_interval_seconds=0,
+        )
+
+
+def test_reject_negative_precipitation_interval():
+    with pytest.raises(ValueError):
+        validate_historical_weather_record(
+            latitude=23.0225,
+            longitude=72.5714,
+            rainfall_mm=8.0,
+            recorded_at=datetime.now(timezone.utc),
+            source="Open-Meteo",
+            precipitation_interval_seconds=-900,
+        )
+
+
+def test_reject_float_precipitation_interval():
+    with pytest.raises(ValueError):
+        validate_historical_weather_record(
+            latitude=23.0225,
+            longitude=72.5714,
+            rainfall_mm=8.0,
+            recorded_at=datetime.now(timezone.utc),
+            source="Open-Meteo",
+            precipitation_interval_seconds=900.5,
+        )        

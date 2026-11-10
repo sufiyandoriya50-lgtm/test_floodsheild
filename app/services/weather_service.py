@@ -102,8 +102,14 @@ def get_current_weather(latitude, longitude):
     except ValueError as error:
         raise RuntimeError("Weather API returned invalid JSON") from error
 
+    # Validate that the API returned a usable current weather object.
     current = data.get("current")
-
+    
+    if not isinstance(current, dict) or not current:
+        raise ValueError("Weather API response is missing current weather data")
+    
+    # Open-Meteo reports the precipitation measurement interval in seconds.
+    interval_seconds = current.get("interval")
     if not isinstance(current, dict):
         raise ValueError("Current weather data is missing or invalid")
     # STEP 1: Check required fields
@@ -144,6 +150,7 @@ def get_current_weather(latitude, longitude):
         "longitude": longitude,
         "temperature_c": current["temperature_2m"],
         "rainfall_mm": current["precipitation"],
+        "precipitation_interval_seconds": interval_seconds,
         "wind_speed_kmh": current["wind_speed_10m"],
         "recorded_at": current["time"],
         "recorded_at": recorded_at,

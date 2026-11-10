@@ -43,3 +43,55 @@ with app.app_context():
         db.session.rollback()
         print("\nWeather storage test failed!")
         print("Error:", error)
+
+def test_save_weather_record_with_precipitation_interval(app):
+    from app.extensions import db
+    from app.models.weather_record import WeatherRecord
+    from app.services.weather_storage_service import save_weather_record
+
+    from datetime import datetime, timezone
+
+    with app.app_context():
+        weather_data = {
+            "latitude": 23.0225,
+            "longitude": 72.5714,
+            "rainfall_mm": 5.0,
+            "precipitation_interval_seconds": 900,
+            "temperature_c": 32.0,
+            "wind_speed_kmh": 12.0,
+            "source": "Open-Meteo",
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        record = save_weather_record(weather_data)
+
+        saved_record = db.session.get(WeatherRecord, record.id)
+
+        assert saved_record is not None
+        assert saved_record.precipitation_interval_seconds == 900
+
+
+def test_save_weather_record_without_precipitation_interval(app):
+    from app.extensions import db
+    from app.models.weather_record import WeatherRecord
+    from app.services.weather_storage_service import save_weather_record
+
+    from datetime import datetime, timezone
+
+    with app.app_context():
+        weather_data = {
+            "latitude": 23.0225,
+            "longitude": 72.5714,
+            "rainfall_mm": 5.0,
+            "temperature_c": 32.0,
+            "wind_speed_kmh": 12.0,
+            "source": "Open-Meteo",
+            "recorded_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        record = save_weather_record(weather_data)
+
+        saved_record = db.session.get(WeatherRecord, record.id)
+
+        assert saved_record is not None
+        assert saved_record.precipitation_interval_seconds is None

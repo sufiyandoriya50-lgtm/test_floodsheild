@@ -27,7 +27,8 @@ class Config:
         "WEATHER_API_URL",
         "https://api.open-meteo.com/v1/forecast"
     )
-
+    #firebase
+    FIREBASE_CREDENTIALS_PATH = os.getenv("FIREBASE_CREDENTIALS_PATH")
     # Application settings
     DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 

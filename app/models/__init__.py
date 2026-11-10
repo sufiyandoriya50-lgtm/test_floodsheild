@@ -13,6 +13,9 @@ from app.models.risk_assessment import RiskAssessment
 from app.models.report_media import FloodReportMedia
 from app.models.historical_flood_event import HistoricalFloodEvent
 from app.models.historical_weather_record import HistoricalWeatherRecord
+from app.models.notification import Notification
+from app.models.device_token import DeviceToken
+from app.models.notification_preference import NotificationPreference
 #this __all__ defines what will be impoterd whensomeone does  from app.models import *
 __all__ = [
     "User",
@@ -22,5 +25,8 @@ __all__ = [
     "FloodReportMedia",
     "ModerationHistory",
     "HistoricalFloodEvent",
-    "HistoricalWeatherRecord"
+    "HistoricalWeatherRecord",
+    "Notification",
+    "DeviceToken",
+    "NotificationPreference"
 ]
