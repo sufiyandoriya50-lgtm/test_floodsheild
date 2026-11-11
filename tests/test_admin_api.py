@@ -7,6 +7,7 @@ Dashboard statistics
 Admin search and filtering"""
 import pytest
 
+from datetime import timedelta
 from app import create_app
 from app.config import TestingConfig
 from app.extensions import db
@@ -92,6 +93,171 @@ def auth_header(token):
         "Authorization": f"Bearer {token}"
     }
 
+# Tests that an administrator can log in using email and password.
+def test_admin_can_login_with_email_and_password(admin_client, admin_test_data):
+
+    response = admin_client.post(
+        "/api/auth/admin/login",
+        json={
+            "email": "admin_api_test@example.com",
+            "password": "AdminPassword123"
+        }
+    )
+
+    assert response.status_code == 200
+
+    data = response.get_json()
+
+    assert data["status"] == "success"
+    assert data["token_type"] == "Bearer"
+    assert data["user"]["role"] == "admin"
+    assert data["access_token"]
+
+
+# Tests that ordinary citizens cannot use administrator login.
+def test_citizen_cannot_use_admin_login(admin_client, admin_test_data):
+
+    response = admin_client.post(
+        "/api/auth/admin/login",
+        json={
+            "email": "citizen_api_test@example.com",
+            "password": "CitizenPassword123"
+        }
+    )
+
+    assert response.status_code == 401
+
+    data = response.get_json()
+
+    assert data["status"] == "error"
+    assert data["message"] == "Invalid email or password"
+
+
+# Tests that incorrect administrator credentials are rejected.
+def test_admin_login_rejects_invalid_password(admin_client, admin_test_data):
+
+    response = admin_client.post(
+        "/api/auth/admin/login",
+        json={
+            "email": "admin_api_test@example.com",
+            "password": "WrongPassword123"
+        }
+    )
+
+    assert response.status_code == 401
+
+# Verifies that administrator login rejects a request without valid JSON.
+def test_admin_login_rejects_invalid_json(admin_client):
+
+    response = admin_client.post(
+        "/api/auth/admin/login",
+        data="invalid json",
+        content_type="application/json"
+    )
+
+    assert response.status_code == 400
+
+    data = response.get_json()
+
+    assert data["status"] == "error"
+    assert data["message"] == "Request body must contain valid JSON"
+
+
+# Verifies that administrator login rejects missing credentials.
+def test_admin_login_rejects_missing_credentials(admin_client):
+
+    response = admin_client.post(
+        "/api/auth/admin/login",
+        json={}
+    )
+
+    assert response.status_code == 400
+
+    data = response.get_json()
+
+    assert data["status"] == "error"
+    assert data["message"] == "Email and password are required"
+
+
+# Verifies that administrator login rejects an invalid email field.
+def test_admin_login_rejects_invalid_email_type(admin_client):
+
+    response = admin_client.post(
+        "/api/auth/admin/login",
+        json={
+            "email": 12345,
+            "password": "AdminPassword123"
+        }
+    )
+
+    assert response.status_code == 400
+
+
+# Verifies that administrator login rejects an empty password.
+def test_admin_login_rejects_empty_password(admin_client):
+
+    response = admin_client.post(
+        "/api/auth/admin/login",
+        json={
+            "email": "admin_api_test@example.com",
+            "password": ""
+        }
+    )
+
+    assert response.status_code == 400
+
+# Verifies that administrator login rejects invalid JSON.
+def test_admin_login_rejects_invalid_json(admin_client):
+
+    response = admin_client.post(
+        "/api/auth/admin/login",
+        data="invalid json",
+        content_type="application/json"
+    )
+
+    assert response.status_code == 400
+
+    data = response.get_json()
+
+    assert data["status"] == "error"
+    assert data["message"] == "Request body must contain valid JSON"
+
+
+# Verifies that administrator login rejects missing credentials.
+def test_admin_login_rejects_missing_credentials(admin_client):
+
+    response = admin_client.post(
+        "/api/auth/admin/login",
+        json={
+            "email": "admin_api_test@example.com"
+        }
+    )
+
+    assert response.status_code == 400
+
+    data = response.get_json()
+
+    assert data["status"] == "error"
+    assert data["message"] == "Email and password are required"
+
+
+# Verifies that administrator login rejects non-string credentials.
+def test_admin_login_rejects_non_string_credentials(admin_client):
+
+    response = admin_client.post(
+        "/api/auth/admin/login",
+        json={
+            "email": 12345,
+            "password": "AdminPassword123"
+        }
+    )
+
+    assert response.status_code == 400
+
+    data = response.get_json()
+
+    assert data["status"] == "error"
+    assert data["message"] == "Email and password are required"
 
 # Tests that administrators can retrieve pending reports.
 def test_admin_can_get_pending_reports(
@@ -128,6 +294,109 @@ def test_unauthenticated_user_cannot_access_admin(
 
     assert response.status_code == 401
 
+
+# Tests that a non-numeric JWT identity cannot access administrator endpoints.
+def test_admin_rejects_non_numeric_jwt_identity(
+    admin_app,
+    admin_client
+):
+    # Create a validly signed JWT with an invalid user identity.
+    with admin_app.app_context():
+        invalid_token = create_access_token(
+            identity="not-a-numeric-user-id"
+        )
+
+    # Attempt to access an administrator-only endpoint.
+    response = admin_client.get(
+        "/api/admin/reports/pending",
+        headers=auth_header(invalid_token)
+    )
+
+    # The request must be rejected without causing a server error.
+    assert response.status_code == 403
+
+    response_data = response.get_json()
+
+    assert response_data["status"] == "error"
+    assert response_data["message"] == (
+        "Administrator access required"
+    )
+
+# Tests that a JWT belonging to a nonexistent user cannot access admin endpoints.
+def test_admin_rejects_nonexistent_user_identity(
+    admin_app,
+    admin_client
+):
+    # Create a valid JWT for a user ID that does not exist.
+    with admin_app.app_context():
+        invalid_token = create_access_token(
+            identity="99999"
+        )
+
+    # Attempt to access an administrator-only endpoint.
+    response = admin_client.get(
+        "/api/admin/reports/pending",
+        headers=auth_header(invalid_token)
+    )
+
+    # The nonexistent account must not receive administrator access.
+    assert response.status_code == 403
+
+    response_data = response.get_json()
+
+    assert response_data["status"] == "error"
+    assert response_data["message"] == (
+        "Administrator access required"
+    )
+
+
+# Tests that expired JWT access tokens cannot access administrator endpoints.
+def test_admin_rejects_expired_jwt(
+    admin_app,
+    admin_client,
+    admin_test_data
+):
+    # Generate an administrator token that is already expired.
+    with admin_app.app_context():
+        expired_token = create_access_token(
+            identity=str(admin_test_data["admin_id"]),
+            expires_delta=timedelta(seconds=-1)
+        )
+
+    # Attempt to access an administrator-only endpoint.
+    response = admin_client.get(
+        "/api/admin/reports/pending",
+        headers=auth_header(expired_token)
+    )
+
+    # Expired tokens must be rejected.
+    assert response.status_code == 401
+
+
+# Tests that an administrator loses access after their role is downgraded.
+def test_admin_access_revoked_after_role_downgrade(
+    admin_app,
+    admin_client,
+    admin_test_data
+):
+    # Change the administrator's database role to citizen.
+    with admin_app.app_context():
+        admin = db.session.get(
+            User,
+            admin_test_data["admin_id"]
+        )
+
+        admin.role = "citizen"
+        db.session.commit()
+
+    # Attempt access using the administrator's previously issued JWT.
+    response = admin_client.get(
+        "/api/admin/reports/pending",
+        headers=auth_header(admin_test_data["admin_token"])
+    )
+
+    # The old token must no longer grant administrator access.
+    assert response.status_code == 403
 
 # Tests that administrators can inspect an individual report.
 def test_admin_can_get_report_details(

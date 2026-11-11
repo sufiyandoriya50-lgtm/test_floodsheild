@@ -6,6 +6,7 @@ from app.models.user import User
 
 # Registers or updates a Firebase Installation ID for a FloodShield user.
 def register_device_token(user_id, fid, platform):
+    """Validate and register a user's Firebase Installation ID."""
 
     # Validate the authenticated user's ID.
     if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
@@ -34,13 +35,17 @@ def register_device_token(user_id, fid, platform):
     if platform not in {"android", "ios"}:
         raise ValueError("Platform must be android or ios")
 
-    # Check whether this installation is already registered.
+    # Find an existing registration using this FID.
     device = DeviceToken.query.filter_by(fid=fid).first()
 
     try:
         if device is not None:
-            # Update the existing installation registration.
-            device.user_id = user_id
+            # Prevent another account from taking over this installation.
+            if device.user_id != user_id:
+                raise ValueError(
+                    "This device installation is already registered to another user"
+                )
+
             device.platform = platform
             device.is_active = True
 

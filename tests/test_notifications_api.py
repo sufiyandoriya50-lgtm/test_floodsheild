@@ -1,5 +1,6 @@
 
 import pytest
+from sqlalchemy import text
 
 from flask_jwt_extended import create_access_token
 
@@ -8,7 +9,7 @@ from app.models.user import User
 from app.models.notification import Notification
 from app.models.device_token import DeviceToken
 from app.models.notification_preference import NotificationPreference
-
+from sqlalchemy.exc import IntegrityError
 
 # Creates two real citizen accounts for testing notification ownership.
 @pytest.fixture()
@@ -58,17 +59,20 @@ def notification_clients(app, notification_users):
         yield clients
 
 
-#
+
+
 # Tests that an authenticated citizen can register an Android device.
 def test_register_android_device(
     app,
     notification_users,
     notification_clients
 ):
+    test_fid = "test-android-firebase-installation-id"
+
     response = notification_clients["first"].post(
         "/api/notifications/device-token",
         json={
-            "fid": "test-android-firebase-installation-id",
+            "fid": test_fid,
             "platform": "android"
         }
     )
@@ -78,21 +82,20 @@ def test_register_android_device(
     response_data = response.get_json()
 
     assert response_data["status"] == "success"
-    assert response_data["device"]["fid"] == (
-        "test-android-firebase-installation-id"
-    )
     assert response_data["device"]["platform"] == "android"
     assert response_data["device"]["is_active"] is True
 
+    # Device identifiers must not be exposed in the API response.
+    assert "fid" not in response_data["device"]
+    assert "token" not in response_data["device"]
+
     with app.app_context():
-        device = DeviceToken.query.filter_by(
-            fid="test-android-firebase-installation-id"
-        ).first()
+        device = DeviceToken.query.filter_by(fid=test_fid).first()
 
         assert device is not None
+        assert device.fid == test_fid
+        assert device.token is None
         assert device.user_id == notification_users["first"]
-
-
 # Tests that invalid device registration data is rejected.
 @pytest.mark.parametrize(
     "payload",
@@ -421,3 +424,242 @@ def test_notification_history_requires_authentication(client):
     response = client.get("/api/notifications")
 
     assert response.status_code == 401
+
+# Tests that the database rejects invalid notification records.
+@pytest.mark.parametrize(
+    "invalid_fields",
+    [
+        {"title": ""},
+        {"title": "   "},
+        {"message": ""},
+        {"message": "   "},
+        {"notification_type": ""},
+        {"deduplication_key": ""},
+        {"deduplication_key": "x" * 101},
+        {"risk_level": "critical"},
+        {"latitude": 91},
+        {"longitude": -181},
+        {"delivery_status": "invalid_status"},
+    ]
+)
+def test_notification_database_rejects_invalid_data(
+    app,
+    notification_users,
+    invalid_fields
+):
+    with app.app_context():
+        notification_data = {
+            "user_id": notification_users["first"],
+            "title": "Valid notification title",
+            "message": "Valid notification message",
+            "notification_type": "flood_alert",
+            "deduplication_key": None,
+            "risk_level": "high",
+            "latitude": 21.1702,
+            "longitude": 72.8311,
+            "delivery_status": "pending"
+        }
+
+        notification_data.update(invalid_fields)
+
+        notification = Notification(**notification_data)
+
+        db.session.add(notification)
+
+        with pytest.raises(IntegrityError):
+            db.session.flush()
+
+        db.session.rollback()
+
+
+# Tests that the database accepts valid notification records.
+def test_notification_database_accepts_valid_data(
+    app,
+    notification_users
+):
+    with app.app_context():
+        notification = Notification(
+            user_id=notification_users["first"],
+            title="Valid Flood Alert",
+            message="High flood risk detected.",
+            notification_type="flood_alert",
+            deduplication_key="flood_alert:valid-test",
+            risk_level="high",
+            latitude=21.1702,
+            longitude=72.8311,
+            delivery_status="pending"
+        )
+
+        db.session.add(notification)
+        db.session.commit()
+
+        assert notification.id is not None
+        assert notification.delivery_status == "pending"
+
+# Verify that the database rejects invalid device-token records.
+@pytest.mark.parametrize(
+    "invalid_fields",
+    [
+        {"platform": "windows"},
+        {"platform": ""},
+        {"platform": "ANDROID"},
+        {"token": None, "fid": None},
+        {"token": "", "fid": None},
+        {"token": None, "fid": ""},
+        {"token": "x" * 513, "fid": None},
+        {"token": None, "fid": "x" * 513},
+    ]
+)
+def test_device_token_database_rejects_invalid_data(
+    app, notification_users, invalid_fields
+):
+    with app.app_context():
+        device_data = {
+            "user_id": notification_users["first"],
+            "token": None,
+            "fid": "valid-firebase-installation-id",
+            "platform": "android",
+            "is_active": True
+        }
+
+        device_data.update(invalid_fields)
+
+        device = DeviceToken(**device_data)
+        db.session.add(device)
+
+        with pytest.raises(IntegrityError):
+            db.session.flush()
+
+        db.session.rollback()
+
+
+# Verify that the database accepts valid device-token records.
+def test_device_token_database_accepts_valid_data(
+    app, notification_users
+):
+    with app.app_context():
+        device = DeviceToken(
+            user_id=notification_users["first"],
+            fid="valid-firebase-installation-id",
+            platform="android",
+            is_active=True
+        )
+
+        db.session.add(device)
+        db.session.commit()
+
+        assert device.id is not None
+        assert device.platform == "android"
+        assert device.fid == "valid-firebase-installation-id"
+
+
+# Verify that a legacy FCM token can exist without an FID.
+def test_device_token_database_accepts_legacy_token(
+    app, notification_users
+):
+    with app.app_context():
+        device = DeviceToken(
+            user_id=notification_users["first"],
+            token="valid-legacy-fcm-registration-token",
+            platform="ios",
+            is_active=True
+        )
+
+        db.session.add(device)
+        db.session.commit()
+
+        assert device.id is not None
+        assert device.token == "valid-legacy-fcm-registration-token"
+        assert device.fid is None
+
+
+# Verify that the database rejects invalid notification preference values.
+@pytest.mark.parametrize(
+    "push_enabled, high_risk_enabled, severe_risk_enabled",
+    [
+        (None, True, True),
+        (True, None, True),
+        (True, True, None),
+        (2, True, True),
+        (True, -1, True),
+        (True, True, 5),
+    ]
+)
+def test_notification_preference_database_rejects_invalid_data(
+    app,
+    notification_users,
+    push_enabled,
+    high_risk_enabled,
+    severe_risk_enabled
+):
+    with app.app_context():
+        with pytest.raises(IntegrityError):
+            db.session.execute(
+                text("""
+                    INSERT INTO notification_preferences (
+                        user_id,
+                        push_enabled,
+                        high_risk_enabled,
+                        severe_risk_enabled
+                    )
+                    VALUES (
+                        :user_id,
+                        :push_enabled,
+                        :high_risk_enabled,
+                        :severe_risk_enabled
+                    )
+                """),
+                {
+                    "user_id": notification_users["first"],
+                    "push_enabled": push_enabled,
+                    "high_risk_enabled": high_risk_enabled,
+                    "severe_risk_enabled": severe_risk_enabled
+                }
+            )
+
+        db.session.rollback()
+
+
+# Verify that valid notification preferences are accepted.
+def test_notification_preference_database_accepts_valid_data(
+    app, notification_users
+):
+    with app.app_context():
+        preference = NotificationPreference(
+            user_id=notification_users["first"],
+            push_enabled=True,
+            high_risk_enabled=False,
+            severe_risk_enabled=True
+        )
+
+        db.session.add(preference)
+        db.session.commit()
+
+        assert preference.id is not None
+        assert preference.push_enabled is True
+        assert preference.high_risk_enabled is False
+        assert preference.severe_risk_enabled is True
+
+
+# Verify that a user cannot have duplicate preference records.
+def test_notification_preference_rejects_duplicate_user(
+    app, notification_users
+):
+    with app.app_context():
+        first_preference = NotificationPreference(
+            user_id=notification_users["first"]
+        )
+
+        db.session.add(first_preference)
+        db.session.commit()
+
+        duplicate_preference = NotificationPreference(
+            user_id=notification_users["first"]
+        )
+
+        db.session.add(duplicate_preference)
+
+        with pytest.raises(IntegrityError):
+            db.session.flush()
+
+        db.session.rollback()

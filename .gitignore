@@ -1,3 +1,75 @@
 # Firebase private credentials
 firebase-service-account.json
 *service-account*.json
+
+
+# Python virtual environments
+myvenv/
+venv/
+.venv/
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Test and coverage files
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local database files
+instance/
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+
+# IDE and editor files
+.vscode/
+.idea/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# Flutter generated files
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+
+# Android generated files
+android/.gradle/
+
+# Python virtual environment alternatives
+ENV/
+env/
+
+# Python build and distribution files
+build/
+dist/
+*.egg-info/
+
+# Flutter and Dart generated files
+.flutter-plugins-dependencies
+*.freezed.dart
+*.g.dart
+
+# Test temporary files
+.tox/
+.nox/
+
+# Local environment and debug files
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local

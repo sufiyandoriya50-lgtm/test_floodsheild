@@ -52,11 +52,10 @@ def test_notification_sent_successfully(app, test_user, monkeypatch):
     with app.app_context():
         device = DeviceToken(
             user_id=test_user,
-            fid="test-firebase-device-token",
+            fid="test-firebase-installation-id",
             platform="android",
             is_active=True
         )
-
         db.session.add(device)
         db.session.commit()
 
@@ -92,11 +91,10 @@ def test_unregistered_device_token_is_deactivated(
     with app.app_context():
         device = DeviceToken(
             user_id=test_user,
-            fid="invalid-device-token",
+            fid="test-firebase-installation-id",
             platform="android",
             is_active=True
         )
-
         db.session.add(device)
         db.session.commit()
 
@@ -131,11 +129,10 @@ def test_notification_remains_pending_without_firebase(app, test_user, monkeypat
     with app.app_context():
         device = DeviceToken(
             user_id=test_user,
-            fid="test-pending-device-token",
+            fid="test-firebase-installation-id",
             platform="android",
             is_active=True
         )
-
         db.session.add(device)
         db.session.commit()
 

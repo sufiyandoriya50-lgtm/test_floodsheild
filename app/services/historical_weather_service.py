@@ -2,9 +2,7 @@ import math
 from datetime import datetime, timezone
 
 
-"""
-    Validates one historical weather observation before database storage.
-    """
+#Validates one historical weather observation before database storage.
 def validate_historical_weather_record(
     latitude,
     longitude,

@@ -1,10 +1,21 @@
 from datetime import datetime, timezone
 
 from app.extensions import db
-
+from sqlalchemy import CheckConstraint
 
 class ModerationHistory(db.Model):
     __tablename__ = "moderation_history"
+        # Enforce valid moderation statuses at the database level.
+    __table_args__ = (
+        CheckConstraint(
+            "previous_status IN ('pending', 'verified', 'rejected')",
+            name="check_moderation_previous_status"
+        ),
+        CheckConstraint(
+            "new_status IN ('pending', 'verified', 'rejected')",
+            name="check_moderation_new_status"
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -37,12 +48,14 @@ class ModerationHistory(db.Model):
         default=lambda: datetime.now(timezone.utc),
         nullable=False
     )
-
     report = db.relationship(
         "FloodReport",
-        backref=db.backref("moderation_history", lazy=True)
+        backref=db.backref(
+            "moderation_history",
+            lazy=True,
+            passive_deletes="all"
+        )
     )
-
     admin = db.relationship("User")
 
     def __repr__(self):

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from app.extensions import db
+from app.extensions import db ,limiter
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
@@ -15,11 +15,11 @@ notifications_bp = Blueprint("notifications", __name__)
 
 
 
-# POST /api/notifications/device-token
-# Registers or updates the authenticated user's Firebase Installation ID.
+
+# Handles registration of an FCM-enabled mobile device for FloodShield.
 @notifications_bp.route("/api/notifications/device-token", methods=["POST"])
+@limiter.limit("20 per hour")
 @jwt_required()
-# Handles registration of a mobile device for FloodShield push notifications.
 def register_device():
     data = request.get_json(silent=True)
 
@@ -46,7 +46,6 @@ def register_device():
             "message": "Device registered successfully",
             "device": {
                 "id": device.id,
-                "fid": device.fid,
                 "platform": device.platform,
                 "is_active": device.is_active
             }

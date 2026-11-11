@@ -29,7 +29,7 @@ def create_flood_report(
     except Exception:
         db.session.rollback()
         raise
-
+from sqlalchemy import or_
 """to get all available flood reports by status filter and also if specific reports of areaa is needed by km radius and pagination added"""
 
 def get_all_flood_reports(
@@ -40,11 +40,23 @@ def get_all_flood_reports(
     page=1,
     per_page=20,
     created_after=None,
-    created_before=None
-    
+    created_before=None,
+    visible_to_user_id=None,
+    include_all=False
 ):
     query = FloodReport.query
-    # Filter reports by creation date.
+
+    # Restrict citizens to their own reports and publicly visible verified reports.
+    if not include_all:
+        if visible_to_user_id is None:
+            raise ValueError("A user ID is required to retrieve visible reports")
+    
+        query = query.filter(
+            or_(
+                FloodReport.user_id == visible_to_user_id,
+                FloodReport.status == "verified"
+            )
+        )    # Filter reports by creation date.
     if created_after is not None:
        query = query.filter(FloodReport.created_at >= created_after)
 
@@ -55,9 +67,11 @@ def get_all_flood_reports(
     if status:
         query = query.filter_by(status=status)
 
-    # Sort newest reports first.
-    query = query.order_by(FloodReport.created_at.desc())
-
+    # Sort newest reports first, using report ID as a stable tie-breaker.
+    query = query.order_by(
+        FloodReport.created_at.desc(),
+        FloodReport.id.desc()
+    )    
     # Check whether location filtering is requested.
     location_filter = (
         latitude is not None

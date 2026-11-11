@@ -2,10 +2,21 @@
 from datetime import datetime, timezone
 
 from app.extensions import db
-
+from sqlalchemy import CheckConstraint
 
 class FloodReportMedia(db.Model):
     __tablename__ = "flood_report_media"
+    # Enforce valid image sizes and supported image MIME types.
+    __table_args__ = (
+        CheckConstraint(
+            "file_size_bytes > 0 AND file_size_bytes <= 5242880",
+            name="check_report_media_file_size"
+        ),
+        CheckConstraint(
+            "mime_type IN ('image/jpeg', 'image/png', 'image/webp')",
+            name="check_report_media_mime_type"
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -42,15 +53,13 @@ class FloodReportMedia(db.Model):
         default=lambda: datetime.now(timezone.utc),
         nullable=False
     )
-
     report = db.relationship(
         "FloodReport",
         backref=db.backref(
             "media_files",
             lazy=True,
-            cascade="all, delete-orphan"
+            passive_deletes="all"
         )
     )
-
     def __repr__(self):
         return f"<FloodReportMedia {self.id}: {self.original_filename}>"

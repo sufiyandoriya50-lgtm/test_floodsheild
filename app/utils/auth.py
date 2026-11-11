@@ -2,15 +2,16 @@
 from functools import wraps
 
 from flask import jsonify
-from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+from flask_jwt_extended import (
+    verify_jwt_in_request,
+    get_jwt_identity
+)
 
 from app.models.user import User
 from app.extensions import db
 
 
-"""
- Decorator that allows access only to authenticated administrators.
-"""
+# Restricts access to authenticated users with administrator privileges.
 def admin_required(function):
 
     @wraps(function)
@@ -19,19 +20,29 @@ def admin_required(function):
         # Verify the JWT access token.
         verify_jwt_in_request()
 
-        # Get the authenticated user's ID.
+        # Retrieve the identity stored inside the JWT.
         user_id = get_jwt_identity()
 
-        # Find the user in the database.
-        user = db.session.get(User, int(user_id))
+        # Reject identities that cannot represent a database user ID.
+        try:
+            user_id = int(user_id)
+        except (TypeError, ValueError):
+            return jsonify({
+                "status": "error",
+                "message": "Administrator access required"
+            }), 403
 
-        # Check whether the user has administrator privileges.
+        # Retrieve the authenticated user from the database.
+        user = db.session.get(User, user_id)
+
+        # Reject missing users and non-administrator accounts.
         if user is None or user.role != "admin":
             return jsonify({
                 "status": "error",
                 "message": "Administrator access required"
             }), 403
 
+        # Continue to the protected route.
         return function(*args, **kwargs)
 
     return wrapper

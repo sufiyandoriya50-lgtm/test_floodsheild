@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 import pytest
-
+from sqlalchemy.exc import IntegrityError
 from app import create_app
 from app.config import TestingConfig
 from app.extensions import db
@@ -131,4 +131,78 @@ def test_store_historical_weather_without_interval(app):
         )
 
         assert saved_record is not None
+        assert saved_record.precipitation_interval_seconds is None
+
+
+# Verify that the database rejects invalid historical weather data.
+@pytest.mark.parametrize(
+    "invalid_fields",
+    [
+        {"latitude": 91},
+        {"latitude": -91},
+        {"longitude": 181},
+        {"longitude": -181},
+        {"rainfall_mm": -1},
+        {"wind_speed_kmh": -1},
+        {"precipitation_interval_seconds": 0},
+        {"precipitation_interval_seconds": -60},
+        {"source": ""},
+        {"source": "   "},
+        {"source": "S" * 101},
+    ]
+)
+def test_historical_weather_database_rejects_invalid_data(
+    app, invalid_fields
+):
+    with app.app_context():
+        record_data = {
+            "latitude": 23.0225,
+            "longitude": 72.5714,
+            "rainfall_mm": 20.0,
+            "recorded_at": datetime.now(timezone.utc),
+            "temperature_c": 30.0,
+            "wind_speed_kmh": 10.0,
+            "weather_code": 61,
+            "precipitation_interval_seconds": 3600,
+            "source": "Historical Dataset"
+        }
+
+        record_data.update(invalid_fields)
+
+        record = HistoricalWeatherRecord(**record_data)
+        db.session.add(record)
+
+        with pytest.raises(IntegrityError):
+            db.session.flush()
+
+        db.session.rollback()
+
+
+# Verify that optional historical weather fields can remain NULL.
+def test_historical_weather_database_accepts_optional_null_fields(app):
+    with app.app_context():
+        record = HistoricalWeatherRecord(
+            latitude=23.0225,
+            longitude=72.5714,
+            rainfall_mm=20.0,
+            recorded_at=datetime.now(timezone.utc),
+            temperature_c=None,
+            wind_speed_kmh=None,
+            weather_code=None,
+            precipitation_interval_seconds=None,
+            source="Historical Dataset"
+        )
+
+        db.session.add(record)
+        db.session.commit()
+
+        saved_record = db.session.get(
+            HistoricalWeatherRecord,
+            record.id
+        )
+
+        assert saved_record is not None
+        assert saved_record.temperature_c is None
+        assert saved_record.wind_speed_kmh is None
+        assert saved_record.weather_code is None
         assert saved_record.precipitation_interval_seconds is None

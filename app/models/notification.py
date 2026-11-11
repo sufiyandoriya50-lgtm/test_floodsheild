@@ -1,6 +1,8 @@
 
 from datetime import datetime, timezone
 
+from sqlalchemy import CheckConstraint
+
 from app.extensions import db
 
 
@@ -8,6 +10,48 @@ from app.extensions import db
 class Notification(db.Model):
 
     __tablename__ = "notifications"
+
+    # Enforce notification integrity at the database level.
+    __table_args__ = (
+        CheckConstraint(
+            "length(trim(title)) > 0",
+            name="check_notification_title"
+        ),
+        CheckConstraint(
+            "length(trim(message)) > 0",
+            name="check_notification_message"
+        ),
+        CheckConstraint(
+            "length(trim(notification_type)) > 0",
+            name="check_notification_type"
+        ),
+        CheckConstraint(
+            "deduplication_key IS NULL OR "
+            "(length(trim(deduplication_key)) > 0 "
+            "AND length(deduplication_key) <= 100)",
+            name="check_notification_deduplication_key"
+        ),
+        CheckConstraint(
+            "risk_level IS NULL OR "
+            "risk_level IN ('low', 'moderate', 'high', 'severe')",
+            name="check_notification_risk_level"
+        ),
+        CheckConstraint(
+            "latitude IS NULL OR "
+            "(latitude >= -90 AND latitude <= 90)",
+            name="check_notification_latitude"
+        ),
+        CheckConstraint(
+            "longitude IS NULL OR "
+            "(longitude >= -180 AND longitude <= 180)",
+            name="check_notification_longitude"
+        ),
+        CheckConstraint(
+            "delivery_status IN "
+            "('pending', 'no_devices', 'sent', 'partial', 'failed')",
+            name="check_notification_delivery_status"
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -29,11 +73,13 @@ class Notification(db.Model):
         nullable=False,
         default="flood_alert"
     )
+
     deduplication_key = db.Column(
         db.String(100),
         nullable=True,
         index=True
     )
+
     # Risk level associated with the alert.
     risk_level = db.Column(db.String(30), nullable=True)
 

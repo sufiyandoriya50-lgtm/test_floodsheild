@@ -1,4 +1,4 @@
-
+import math
 import firebase_admin
 from firebase_admin import messaging
 
@@ -45,22 +45,37 @@ def send_notification(
     if risk_level is not None:
         if risk_level not in {"low", "moderate", "high", "severe"}:
             raise ValueError("Invalid risk level")
+        # Validate the optional deduplication key.
+    if deduplication_key is not None:
+        if not isinstance(deduplication_key, str):
+            raise ValueError("Deduplication key must be a string")
 
-    # Validate optional coordinates.
+        deduplication_key = deduplication_key.strip()
+
+        if not deduplication_key:
+            raise ValueError("Deduplication key cannot be empty")
+
+        if len(deduplication_key) > 100:
+            raise ValueError("Deduplication key cannot exceed 100 characters")
+       # Validate optional coordinates.
     for coordinate_name, coordinate in (
         ("latitude", latitude),
         ("longitude", longitude)
     ):
         if coordinate is not None:
-            if isinstance(coordinate, bool) or not isinstance(coordinate, (int, float)):
+            if isinstance(coordinate, bool) or not isinstance(
+                coordinate, (int, float)
+            ):
                 raise ValueError(f"{coordinate_name} must be numeric")
+
+            if not math.isfinite(coordinate):
+                raise ValueError(f"{coordinate_name} must be finite")
 
     if latitude is not None and not -90 <= latitude <= 90:
         raise ValueError("Latitude must be between -90 and 90")
 
     if longitude is not None and not -180 <= longitude <= 180:
         raise ValueError("Longitude must be between -180 and 180")
-
     # Create the notification record before attempting delivery.
     notification = Notification(
         user_id=user_id,
@@ -89,9 +104,8 @@ def send_notification(
          is_active=True
         ).all()
 
-     # Excludes legacy registrations that do not yet have a Firebase Installation ID.
+     # Only devices with Firebase Installation IDs can receive FID-targeted messages.
     devices = [device for device in devices if device.fid]
-
     if not devices:
         notification.delivery_status = "no_devices"
         db.session.commit()
@@ -108,7 +122,7 @@ def send_notification(
 
     # Send the notification separately to each registered device.
     for device in devices:
-# Build a Firebase message addressed to the device's Installation ID.
+# Build a Firebase message for the registered device.
         firebase_message = messaging.Message(
             notification=messaging.Notification(
                 title=notification.title,

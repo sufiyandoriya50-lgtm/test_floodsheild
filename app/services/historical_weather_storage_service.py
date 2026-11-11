@@ -4,10 +4,7 @@ from app.services.historical_weather_service import (
     validate_historical_weather_record,
 )
 
-
-"""
-    Validates and stores one historical weather observation.
-    """
+# Validates and stores one historical weather observation.
 def create_historical_weather_record(
     latitude,
     longitude,

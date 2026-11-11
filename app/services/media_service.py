@@ -11,6 +11,13 @@ from app.models.report_media import FloodReportMedia
 
 MAX_FILE_SIZE = 5 * 1024 * 1024
 
+# Maximum permitted dimensions for uploaded photographs.
+MAX_IMAGE_WIDTH = 6000
+MAX_IMAGE_HEIGHT = 6000
+
+# Maximum permitted total image pixels.
+MAX_IMAGE_PIXELS = 25_000_000
+
 ALLOWED_EXTENSIONS = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
@@ -57,27 +64,65 @@ def validate_image_file(uploaded_file):
     if not valid_signature:
         raise ValueError("File content does not match its image extension")
     # Ask Pillow to verify that the file is a readable image.
+    # Verify the image structure and fully decode its image data.
     try:
-        image = Image.open(uploaded_file.stream)
+        with Image.open(uploaded_file.stream) as image:
 
-        expected_formats = {
-            ".jpg": "JPEG",
-            ".jpeg": "JPEG",
-            ".png": "PNG",
-            ".webp": "WEBP"
-        }
+            expected_formats = {
+                ".jpg": "JPEG",
+                ".jpeg": "JPEG",
+                ".png": "PNG",
+                ".webp": "WEBP"
+            }
 
-        if image.format != expected_formats[extension]:
-            raise ValueError("Image format does not match its extension")
+            if image.format != expected_formats[extension]:
+                raise ValueError(
+                    "Image format does not match its extension"
+                )
 
-        image.verify()
+            # Reject animated images.
+            if getattr(image, "n_frames", 1) != 1:
+                raise ValueError(
+                    "Animated images are not allowed"
+                )
 
-    except (UnidentifiedImageError, OSError, SyntaxError) as error:
-        raise ValueError("Uploaded file is not a valid image") from error
+            # Check dimensions before decoding pixel data.
+            width, height = image.size
+
+            if width > MAX_IMAGE_WIDTH or height > MAX_IMAGE_HEIGHT:
+                raise ValueError(
+                    "Image dimensions must not exceed 6000 x 6000 pixels"
+                )
+
+            if width * height > MAX_IMAGE_PIXELS:
+                raise ValueError(
+                    "Image contains too many pixels"
+                )
+
+            # Verify the image structure.
+            image.verify()
+
+        # Reopen the image because verify() invalidates the image object.
+        uploaded_file.stream.seek(0)
+
+        with Image.open(uploaded_file.stream) as image:
+            image.load()
+
+    except ValueError:
+        raise
+
+    except (
+        UnidentifiedImageError,
+        OSError,
+        SyntaxError,
+        Image.DecompressionBombError
+    ) as error:
+        raise ValueError(
+            "Uploaded file is not a valid or safe image"
+        ) from error
 
     finally:
         uploaded_file.stream.seek(0)
-
 
     return extension, file_size
 
@@ -108,11 +153,16 @@ def save_report_media(report, uploaded_files):
 
             uploaded_file.save(absolute_path)
             saved_paths.append(absolute_path)
-
+            # Sanitize the original filename before storing it.
             original_filename = secure_filename(
-                uploaded_file.filename or "image"
-            )[:255]
-
+                uploaded_file.filename or ""
+            )
+            
+            # Use a safe fallback if sanitization produces an empty filename.
+            if not original_filename:
+                original_filename = "image"
+            
+            original_filename = original_filename[:255]
             relative_path = os.path.join(
                 "uploads",
                 "reports",
@@ -134,17 +184,25 @@ def save_report_media(report, uploaded_files):
         db.session.commit()
 
         return media_records
-
     except Exception:
         db.session.rollback()
 
         # Remove files if the database operation fails.
         for path in saved_paths:
-            if os.path.exists(path):
-                os.remove(path)
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
 
+            except OSError:
+                current_app.logger.exception(
+                    "Could not remove uploaded photograph after save failure: %s",
+                    path
+                )
+
+        # Preserve the original error.
         raise
-
+    # Preserve the original error.
+    raise
 # to send requested report image to user from backend according to report
 def get_report_media(report_id):
     media_records = (
@@ -170,7 +228,12 @@ def get_report_media(report_id):
     ]
 
 #to delete image direcly by user
+
+# Deletes a photograph and its database record while protecting against partial failures.
 def delete_report_media(report_id, media_id):
+    """Delete report media with filesystem and database recovery."""
+
+    # Step 1: Find the photograph belonging to the specified report.
     media = FloodReportMedia.query.filter_by(
         id=media_id,
         report_id=report_id
@@ -179,6 +242,7 @@ def delete_report_media(report_id, media_id):
     if media is None:
         return False
 
+    # Step 2: Construct the physical image path.
     upload_directory = os.path.join(
         current_app.instance_path,
         "uploads",
@@ -188,17 +252,49 @@ def delete_report_media(report_id, media_id):
     filename = os.path.basename(media.file_path)
     absolute_path = os.path.join(upload_directory, filename)
 
+    # Step 3: Create a temporary path for the image.
+    staged_path = (
+        f"{absolute_path}.deleting-{uuid.uuid4().hex}"
+    )
+
+    image_staged = False
+
     try:
-        # Delete the database record first.
+        # Step 4: Temporarily rename the image if it exists.
+        if os.path.exists(absolute_path):
+            os.replace(absolute_path, staged_path)
+            image_staged = True
+
+        # Step 5: Delete the database record.
         db.session.delete(media)
         db.session.commit()
 
-        # Delete the corresponding physical image file.
-        if os.path.exists(absolute_path):
-            os.remove(absolute_path)
-
-        return True
-
     except Exception:
+        # Step 6: Roll back the database transaction.
         db.session.rollback()
+
+        # Restore the original image if database deletion failed.
+        if image_staged and os.path.exists(staged_path):
+            try:
+                os.replace(staged_path, absolute_path)
+
+            except OSError:
+                current_app.logger.exception(
+                    "Could not restore photograph after deletion failure: %s",
+                    staged_path
+                )
+
         raise
+
+    # Step 7: Remove the temporarily renamed image after commit.
+    if image_staged:
+        try:
+            os.remove(staged_path)
+
+        except OSError:
+            current_app.logger.exception(
+                "Database record deleted, but temporary image cleanup failed: %s",
+                staged_path
+            )
+
+    return True

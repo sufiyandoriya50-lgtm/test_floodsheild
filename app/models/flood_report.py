@@ -1,15 +1,35 @@
 
 from datetime import datetime, timezone
 
+from sqlalchemy import CheckConstraint
+
 from app.extensions import db
 
 
+# Represents a community-submitted flood or waterlogging report.
 class FloodReport(db.Model):
-    """
-    Represents a community-submitted flood or waterlogging report.
-    """
 
     __tablename__ = "flood_reports"
+
+    # Enforce valid report data at the database level.
+    __table_args__ = (
+        CheckConstraint(
+            "latitude >= -90 AND latitude <= 90",
+            name="check_flood_report_latitude"
+        ),
+        CheckConstraint(
+            "longitude >= -180 AND longitude <= 180",
+            name="check_flood_report_longitude"
+        ),
+        CheckConstraint(
+            "water_depth_cm IS NULL OR water_depth_cm >= 0",
+            name="check_flood_report_water_depth"
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'verified', 'rejected')",
+            name="check_flood_report_status"
+        ),
+    )
 
     # Primary key
     id = db.Column(db.Integer, primary_key=True)
